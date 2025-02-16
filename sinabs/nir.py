@@ -8,6 +8,7 @@ import torch
 from torch import nn
 
 import sinabs.layers as sl
+import sinabs.spicenet as sn
 
 
 def _as_pair(x) -> Tuple[int, int]:
@@ -114,6 +115,39 @@ def _import_sinabs_module(
         start_dim = node.start_dim + 1 if node.start_dim >= 0 else node.start_dim
         end_dim = node.end_dim + 1 if node.end_dim >= 0 else node.end_dim
         return nn.Flatten(start_dim=start_dim, end_dim=end_dim)
+    elif isinstance(node, nir.SPICEnetSOMNeuron):
+        return sn.SpiceSOMNeuron(
+            standard_deviation=node.std.item(),
+            preferred_value=node.mean.item(),
+            timesteps=num_timesteps,
+        )
+    elif isinstance(node, nir.SPICEnetSOM):
+        return sn.SpiceSOM.from_lists(
+            standard_deviation=[neuron.std.item() for neuron in node.neurons],
+            preferred_value=[neuron.mean.item() for neuron in node.neurons],
+            value_range_start=-1,
+            value_range_end=1,
+            const_LR_interaction_kernel=0.8,
+            const_LR_tuning_curve=0.8,
+            timesteps=num_timesteps,
+        )
+    elif isinstance(node, nir.SPICEnetHCM):
+        return sn.SpiceHCM.from_weights(
+            weights=node.weights,
+            activation_bar_vector_1=node.activation_bar_vector_1,
+            activation_bar_vector_2=node.activation_bar_vector_2,
+            const_lrf_trust_of_new=0.8,
+            const_lrf_weights=0.8
+        )
+    elif isinstance(node, nir.SPICENet):
+        # ONLY allow 2 SOMs and 1 HCM until Original Spicenet multi-HCM support is added
+        assert len(node.soms) == 2
+        assert len(node.hcms.values()) == 1
+        return sn.SpiceNet(
+            spice_som_1=_import_sinabs_module(node.soms["0"], batch_size, num_timesteps),
+            spice_som_2=_import_sinabs_module(node.soms["1"], batch_size, num_timesteps),
+            correlation_matrix=_import_sinabs_module(list(node.hcms.values())[0], batch_size, num_timesteps)
+        )
     elif isinstance(node, nir.Input):
         return nn.Identity()
     elif isinstance(node, nir.Output):
@@ -226,6 +260,27 @@ def _extract_sinabs_module(module: torch.nn.Module) -> Optional[nir.NIRNode]:
             start_dim=start_dim,
             end_dim=end_dim,
         )
+    elif isinstance(module, sn.SpiceSOMNeuron):
+        return nir.SPICEnetSOMNeuron(
+            std=np.array(module.standard_deviation),
+            mean=np.array(module.preferred_value),
+        )
+    elif isinstance(module, sn.SpiceSOM):
+        return nir.SPICEnetSOM(
+            neurons=[
+                nir.SPICEnetSOMNeuron(std=np.array(module.standard_deviation[i]), mean=np.array(module.preferred_value[i]))
+                for i in range(len(module.standard_deviation))
+            ]
+        )
+    elif isinstance(module, sn.SpiceHCM):
+        return nir.SPICEnetHCM(
+            weights=module.weights,
+            activation_bar_vector_1=module.activation_bar_vector_1,
+            activation_bar_vector_2=module.activation_bar_vector_2
+        )
+    elif isinstance(module, sn.SpiceNet):
+        return nir.SPICENet.from_lists(soms=[_extract_sinabs_module(module.som_1[0]), _extract_sinabs_module(module.som_2[0])], hcms=[(0, 1, _extract_sinabs_module(module.get_correlation_matrix()))])
+    print(f"Module {module} not supported")
     raise NotImplementedError(f"Module {type(module)} not supported")
 
 
