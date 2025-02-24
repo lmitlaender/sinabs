@@ -87,8 +87,8 @@ class SpiceNet(nn.Module):
 
             if print_output:
                 tmp = time.time()
-            self.__correlation_matrix[0].fit(som_1=self.som_1,
-                                          som_2=self.som_2,
+            self.__correlation_matrix[0].fit(som_1=self.som_1[0],
+                                          som_2=self.som_2[0],
                                           values_som_1=p_list_som_1[i],
                                           values_som_2=p_list_som_2[i],
                                           epochs=epochs_on_batch)

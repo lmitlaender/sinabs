@@ -53,7 +53,7 @@ class SpiceSOM(nn.Module):
             nn.ReLU(),
             nn.Linear(256, 1)
         )
-        ann.load_state_dict(torch.load((Path(__file__).parent / "som_neuron_ann.pth").resolve()))
+        ann.load_state_dict(torch.load((Path(__file__).parent / "low_range_log1p.pth").resolve()))
         
         self.som_snn = [from_model(ann, input_shape=(3,), add_spiking_output=False, synops=False, num_timesteps=self.timesteps)]
 
@@ -100,7 +100,7 @@ class SpiceSOM(nn.Module):
             
         # Transform result from list of answers for each neuron to list of activation vectors of each neuron for a value
         result = torch.stack(result, dim=0)
-        return result[:, 50:, :, :].mean(dim=1)
+        return torch.expm1(result[:, 50:, :, :].mean(dim=1))
     
     def __len__(self) -> int:
         return len(self.standard_deviation)
@@ -112,7 +112,6 @@ class SpiceSOM(nn.Module):
     
     def fit(self, values: list[float], epochs: int):
         for epoch in range(epochs):
-            print(f"Epoch {epoch + 1}/{epochs}")
             for i in range(len(values)):
                 winning_neuron_index, _ = self.__argmax_neuron_activation(values[i])
 
@@ -163,6 +162,30 @@ class SpiceSOM(nn.Module):
         self.standard_deviation[index] += learn_rate * interaction_kernel_value * (
                 (value - self.preferred_value[index]) ** 2 - self.standard_deviation[index] ** 2
         )
+        
+    def all_activation_for_values(self, values: list[float]):
+        """
+        Returns the activation values for a list of values.
+        :param values: The values for wich the activation has to be calculated.
+        :return: An array of activation values, ordered like the input list.
+        """
+        return np.array([self.get_activation_vector(value) for value in values]).T
+
+        
+    def calculate_activation_values(self, values: list[float]):
+        """
+        Calculates activation values for all neurons in the som.
+        :param values:
+        :return: A numpy array the first col is the preferred value, second col is the tuning curve width
+        and the following cols are the activation values.
+        """
+        activation_values = np.array(self.all_activation_for_values(values))
+        return np.concatenate((
+            np.array(
+                [[pref for pref in self.preferred_value],
+                 [std for std in self.standard_deviation]]).transpose(),
+            activation_values),
+            axis=1)
 
     def naive_decode(self, value: float, neuron_index: int) -> float:
         activation_value = value
@@ -170,7 +193,7 @@ class SpiceSOM(nn.Module):
         r = math.sqrt(2 * self.standard_deviation[neuron_index] ** 2 * math.log(
             math.sqrt(2 * math.pi) * activation_value * self.standard_deviation[neuron_index] ** 2, 10))
 
-        if neuron_index < len(self.neurons) / 2:
+        if neuron_index < len(self.standard_deviation) / 2:
             return self.preferred_value[neuron_index] - r
         else:
             return self.preferred_value[neuron_index] + r
@@ -181,7 +204,7 @@ class SpiceSOM(nn.Module):
     
     def get_activation_vector(self, value: float) -> np.array:
         # Get activation values over timesteps
-        results = self.forward(torch.Tensor(value))
+        results = self.forward(torch.Tensor([value]))
         
         # Get the mean activation value over timesteps
         winner_neuron_values = results[0, :, 0]

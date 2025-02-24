@@ -31,7 +31,7 @@ class SpiceSOMNeuron(nn.Module):
             nn.ReLU(),
             nn.Linear(256, 1)
         )
-        ann.load_state_dict(torch.load((Path(__file__).parent / "som_neuron_ann.pth").resolve()))
+        ann.load_state_dict(torch.load((Path(__file__).parent / "low_range_log1p.pth").resolve()))
         
         self.som_snn = [from_model(ann, input_shape=(3,), add_spiking_output=False, synops=False, num_timesteps=self.timesteps)]
 
@@ -57,4 +57,4 @@ class SpiceSOMNeuron(nn.Module):
         # Run input through the SOM SNN
         som_result = self.som_snn[0](input)
         
-        return som_result[50:, :, :].mean(dim=0)
+        return torch.expm1(som_result[50:, :, :].mean(dim=0))

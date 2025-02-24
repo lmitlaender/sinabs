@@ -75,20 +75,20 @@ class SpiceHCM(nn.Module):
         return self.weights
     
     def calculate_som_1_to_2(self, a_array: np.array) -> np.array:
-        if a_array.shape != (len(self.__som_1),):
+        if a_array.shape != (self.__som_1_length,):
             raise ValueError("The input vector must be of the same length as the som amount of neurons.")
         # Take each column of the weight matrix and calculate the dot product with the input array.
         return np.array([a_array.dot(self.weights[:, i]) for i in range(self.weights.shape[0])])
 
     def calculate_som_2_to_1(self, a_array: np.array) -> np.array:
-        if a_array.shape != (len(self.__som_2),):
+        if a_array.shape != (self.__som_2_length,):
             raise ValueError("The input vector must be of the same length as the som amount of neurons.")
         # Take each column of the weight matrix and calculate the dot product with the input array.
         return np.array([a_array.dot(self.weights[i, :]) for i in range(self.weights.shape[1])])
     
     def fit(self,
-            som_1: callable,
-            som_2: callable,
+            som_1,
+            som_2,
             values_som_1: list[float],
             values_som_2: list[float],
             epochs: int):
@@ -101,11 +101,6 @@ class SpiceHCM(nn.Module):
         """
         if len(values_som_1) != len(values_som_2):
             raise Exception('The length of the values of the first som must be equal to the length of the second som.')
-        
-        if not callable(getattr(som_1, "get_activation_vector", None)):
-            raise Exception('The first SOM must have a get_activation_vector method.')
-        if not callable(getattr(som_2, "get_activation_vector", None)):
-            raise Exception('The second SOM must have a get_activation_vector method.')
         
         if len(som_1) != self.__som_1_length:
             raise Exception('The first SOM must have the same amount of neurons as the length of the first dimension of the weight matrix.')
