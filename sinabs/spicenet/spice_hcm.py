@@ -19,8 +19,8 @@ class SpiceHCM(nn.Module):
         :param lrf_trust_of_new: This implementation uses the hebbian covariance learning mechanism. This uses an 'average value', this value is update continuous in this implementation. Use this parameter to tell how much you trust that the new value and want it to change the average. For more information on the mechanism look here: https://rkypragada.medium.com/hebbian-learning-c2166ac0f48d
         """
         super().__init__()
-        self.__lrf_trust_of_new = const_lrf_trust_of_new
-        self.__lrf_weights = const_lrf_weights
+        self.const_lrf_trust_of_new = const_lrf_trust_of_new
+        self.const_lrf_weights = const_lrf_weights
         self.weights = np.ones((som_1_length, som_2_length))
         self.activation_bar_vector_1: np.array = np.zeros(som_1_length)
         self.activation_bar_vector_2: np.array = np.zeros(som_2_length)
@@ -43,18 +43,18 @@ class SpiceHCM(nn.Module):
             activation_vector_som_2 = input[i, 1].numpy()
             
             # We dont want to change any parameter during the forward pass, so we dont automatically update the activation bar vector.
-            loc_activation_bar_vector_1 = ((1.0 - self.__lrf_trust_of_new)
+            loc_activation_bar_vector_1 = ((1.0 - self.const_lrf_trust_of_new)
                                                 * self.activation_bar_vector_1
-                                                + self.__lrf_trust_of_new
+                                                + self.const_lrf_trust_of_new
                                                 * activation_vector_som_1)
-            loc_activation_bar_vector_2 = ((1.0 - self.__lrf_trust_of_new)
+            loc_activation_bar_vector_2 = ((1.0 - self.const_lrf_trust_of_new)
                                                 * self.activation_bar_vector_2
-                                                + self.__lrf_trust_of_new
+                                                + self.const_lrf_trust_of_new
                                                 * activation_vector_som_2)
 
             # Som 1 represents the y-axis and Som 2 the x-axis
             weights_delta_matrix = (
-                    self.__lrf_weights
+                    self.const_lrf_weights
                     * np.matrix(activation_vector_som_1 - loc_activation_bar_vector_1)
                     .transpose()
                     .dot(np.matrix(activation_vector_som_2 - loc_activation_bar_vector_2))
@@ -114,21 +114,27 @@ class SpiceHCM(nn.Module):
             for i in range(len(values_som_1)):
                 activation_vector_som_1 = som_1.get_activation_vector(values_som_1[i])
                 activation_vector_som_2 = som_2.get_activation_vector(values_som_2[i])
-                self.activation_bar_vector_1 = ((1.0 - self.__lrf_trust_of_new)
+                self.activation_bar_vector_1 = ((1.0 - self.const_lrf_trust_of_new)
                                                   * self.activation_bar_vector_1
-                                                  + self.__lrf_trust_of_new
+                                                  + self.const_lrf_trust_of_new
                                                   * activation_vector_som_1)
-                self.activation_bar_vector_2 = ((1.0 - self.__lrf_trust_of_new)
+                self.activation_bar_vector_2 = ((1.0 - self.const_lrf_trust_of_new)
                                                   * self.activation_bar_vector_2
-                                                  + self.__lrf_trust_of_new
+                                                  + self.const_lrf_trust_of_new
                                                   * activation_vector_som_2)
 
                 # Som 1 represents the y-axis and Som 2 the x-axis
                 weights_delta_matrix = (
-                        self.__lrf_weights
+                        self.const_lrf_weights
                         * np.matrix(activation_vector_som_1 - self.activation_bar_vector_1)
                         .transpose()
                         .dot(np.matrix(activation_vector_som_2 - self.activation_bar_vector_2))
                 )
                 self.weights += weights_delta_matrix
                 self.__iteration += 1
+                
+    def get_iteration(self) -> int:
+        return self.__iteration
+    
+    def set_iteration(self, iteration: int):
+        self.__iteration = iteration

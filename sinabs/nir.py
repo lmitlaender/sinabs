@@ -122,23 +122,60 @@ def _import_sinabs_module(
             timesteps=num_timesteps,
         )
     elif isinstance(node, nir.SPICEnetSOM):
-        return sn.SpiceSOM.from_lists(
+        const_LR_interaction_kernel = 0.8
+        const_LR_tuning_curve = 0.8
+        
+        print(node.metadata)
+        
+        if "lrf_tuning_curve" in node.metadata:
+            if "parameters" in node.metadata["lrf_tuning_curve"]:
+                if "value" in node.metadata["lrf_tuning_curve"]["parameters"]:
+                    const_LR_tuning_curve = node.metadata["lrf_tuning_curve"]["parameters"]["value"]
+        if "lrf_interaction_kernel" in node.metadata:
+            if "parameters" in node.metadata["lrf_interaction_kernel"]:
+                if "value" in node.metadata["lrf_interaction_kernel"]["parameters"]:
+                    const_LR_interaction_kernel = node.metadata["lrf_interaction_kernel"]["parameters"]["value"]
+        
+        som = sn.SpiceSOM.from_lists(
             standard_deviation=[neuron.std.item() for neuron in node.neurons],
             preferred_value=[neuron.mean.item() for neuron in node.neurons],
             value_range_start=-1,
             value_range_end=1,
-            const_LR_interaction_kernel=0.8,
-            const_LR_tuning_curve=0.8,
+            const_LR_interaction_kernel=const_LR_interaction_kernel,
+            const_LR_tuning_curve=const_LR_tuning_curve,
             timesteps=num_timesteps,
         )
+        
+        if "iteration" in node.metadata:
+            som.set_iteration(node.metadata["iteration"])
+        
+        return som
     elif isinstance(node, nir.SPICEnetHCM):
-        return sn.SpiceHCM.from_weights(
+        const_lrf_trust_of_new = 0.8
+        const_lrf_weights = 0.8
+        
+        if "lrf_trust_of_new" in node.metadata:
+            if "parameters" in node.metadata["lrf_trust_of_new"]:
+                if "value" in node.metadata["lrf_trust_of_new"]["parameters"]:
+                    const_lrf_trust_of_new = node.metadata["lrf_trust_of_new"]["parameters"]["value"]
+        if "lrf_weights" in node.metadata:
+            if "parameters" in node.metadata["lrf_weights"]:
+                if "value" in node.metadata["lrf_weights"]["parameters"]:
+                    const_lrf_weights = node.metadata["lrf_trust_of_new"]["parameters"]["value"]
+        
+        
+        hcm = sn.SpiceHCM.from_weights(
             weights=node.weights,
             activation_bar_vector_1=node.activation_bar_vector_1,
             activation_bar_vector_2=node.activation_bar_vector_2,
-            const_lrf_trust_of_new=0.8,
-            const_lrf_weights=0.8
+            const_lrf_trust_of_new=const_lrf_trust_of_new,
+            const_lrf_weights=const_lrf_weights
         )
+        
+        if "iteration" in node.metadata:
+            hcm.set_iteration(node.metadata["iteration"])        
+        
+        return hcm
     elif isinstance(node, nir.SPICENet):
         # ONLY allow 2 SOMs and 1 HCM until Original Spicenet multi-HCM support is added
         assert len(node.soms) == 2
@@ -270,13 +307,15 @@ def _extract_sinabs_module(module: torch.nn.Module) -> Optional[nir.NIRNode]:
             neurons=[
                 nir.SPICEnetSOMNeuron(std=np.array(module.standard_deviation[i]), mean=np.array(module.preferred_value[i]))
                 for i in range(len(module.standard_deviation))
-            ]
+            ],
+            metadata={"iteration": module.get_iteration(), "lrf_interaction_kernel": {"type": "const", "parameters": {"value": module.const_LR_interaction_kernel}}, "lrf_tuning_curve": {"type": "const", "parameters": {"value": module.const_LR_tuning_curve}}}
         )
     elif isinstance(module, sn.SpiceHCM):
         return nir.SPICEnetHCM(
             weights=module.weights,
             activation_bar_vector_1=module.activation_bar_vector_1,
-            activation_bar_vector_2=module.activation_bar_vector_2
+            activation_bar_vector_2=module.activation_bar_vector_2,
+            metadata={"iteration": module.get_iteration(), "lrf_trust_of_new": {"type": "const", "parameters": {"value": module.const_lrf_trust_of_new}}, "lrf_weights": {"type": "const", "parameters": {"value": module.const_lrf_weights}}}
         )
     elif isinstance(module, sn.SpiceNet):
         return nir.SPICENet.from_lists(soms=[_extract_sinabs_module(module.som_1[0]), _extract_sinabs_module(module.som_2[0])], hcms=[(0, 1, _extract_sinabs_module(module.get_correlation_matrix()))])

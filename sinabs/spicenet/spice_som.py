@@ -220,3 +220,9 @@ class SpiceSOM(nn.Module):
         """
         return np.array([self.preferred_value,
                          self.standard_deviation]).transpose()
+        
+    def get_iteration(self) -> int:
+        return self.__iteration
+    
+    def set_iteration(self, iteration: int):
+        self.__iteration = iteration
