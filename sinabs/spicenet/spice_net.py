@@ -19,8 +19,25 @@ class SpiceNet(nn.Module):
         self.som_2 = [spice_som_2]
         self.__correlation_matrix = [correlation_matrix]
         
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return x
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        values_som_1 = input[:, 0].numpy()
+        values_som_2 = input[:, 1].numpy()
+        b_size = len(input)
+        p_list_som_1 = [values_som_1[i:i + b_size] for i in range(0, len(values_som_1), b_size)]
+        p_list_som_2 = [values_som_2[i:i + b_size] for i in range(0, len(values_som_2), b_size)]
+
+        iterator = range(len(p_list_som_1))
+        for i in iterator:
+            self.som_1[0].fit(p_list_som_1[i], 10)
+            self.som_2[0].fit(p_list_som_2[i], 10)
+
+            self.__correlation_matrix[0].fit(som_1=self.som_1[0],
+                                          som_2=self.som_2[0],
+                                          values_som_1=p_list_som_1[i],
+                                          values_som_2=p_list_som_2[i],
+                                          epochs=10)
+            
+        return torch.from_numpy(self.__correlation_matrix[0].get_matrix())
 
     def get_som_1(self) -> SpiceSOM:
         return self.som_1[0]

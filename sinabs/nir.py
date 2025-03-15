@@ -122,11 +122,8 @@ def _import_sinabs_module(
             timesteps=num_timesteps,
         )
     elif isinstance(node, nir.SPICEnetSOM):
-        const_LR_interaction_kernel = 0.8
-        const_LR_tuning_curve = 0.8
-        
-        print(node.metadata)
-        
+        const_LR_tuning_curve = None
+        const_LR_interaction_kernel = None
         if "lrf_tuning_curve" in node.metadata:
             if "parameters" in node.metadata["lrf_tuning_curve"]:
                 if "value" in node.metadata["lrf_tuning_curve"]["parameters"]:
@@ -135,6 +132,13 @@ def _import_sinabs_module(
             if "parameters" in node.metadata["lrf_interaction_kernel"]:
                 if "value" in node.metadata["lrf_interaction_kernel"]["parameters"]:
                     const_LR_interaction_kernel = node.metadata["lrf_interaction_kernel"]["parameters"]["value"]
+        
+        if const_LR_tuning_curve is None:
+            print("WARNING: Using default value of 0.8 for const_LR_tuning_curve as not found in NIR metadata")
+            const_LR_tuning_curve = 0.8
+        if const_LR_interaction_kernel is None:
+            print("WARNING: Using default value of 0.8 for const_LR_interaction_kernel as not found in NIR metadata")
+            const_LR_interaction_kernel = 0.8
         
         som = sn.SpiceSOM.from_lists(
             standard_deviation=[neuron.std.item() for neuron in node.neurons],
