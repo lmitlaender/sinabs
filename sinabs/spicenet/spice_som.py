@@ -20,8 +20,18 @@ class SpiceSOM(nn.Module):
                 value_range_end: float,
                 const_LR_interaction_kernel: float,
                 const_LR_tuning_curve: float,
-                timesteps: int):
+                timesteps: int,
+                average_from: int | None = None):
         super().__init__()
+        
+        
+        if average_from is None:
+            average_from = math.floor(timesteps / 2)
+        if average_from >= timesteps:
+            raise ValueError("average_from must be less than timesteps")
+        
+        self.average_from = average_from
+        
         self.__iteration = 0
         self.const_LR_interaction_kernel = const_LR_interaction_kernel
         self.const_LR_tuning_curve = const_LR_tuning_curve
@@ -55,7 +65,7 @@ class SpiceSOM(nn.Module):
         )
         ann.load_state_dict(torch.load((Path(__file__).parent / "low_range_log1p.pth").resolve()))
         
-        self.som_snn = [from_model(ann, input_shape=(3,), add_spiking_output=False, synops=False, num_timesteps=self.timesteps)]
+        self.som_snn_neuron = [from_model(ann, input_shape=(3,), add_spiking_output=False, synops=False, num_timesteps=self.timesteps)]
 
     @classmethod
     def from_lists(
@@ -95,12 +105,12 @@ class SpiceSOM(nn.Module):
             input = input.repeat(self.timesteps, 1, 1)
             
             with torch.no_grad():
-                subresult = self.som_snn[0](input)
+                subresult = self.som_snn_neuron[0](input)
             result.append(subresult)
             
         # Transform result from list of answers for each neuron to list of activation vectors of each neuron for a value
         result = torch.stack(result, dim=0)
-        return torch.expm1(result[:, 50:, :, :].mean(dim=1))
+        return torch.expm1(result[:, self.average_from:, :, :].mean(dim=1))
     
     def __len__(self) -> int:
         return len(self.standard_deviation)
