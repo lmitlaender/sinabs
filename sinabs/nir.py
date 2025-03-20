@@ -167,11 +167,11 @@ def _import_sinabs_module(
                 if "value" in node.metadata["lrf_weights"]["parameters"]:
                     const_lrf_weights = node.metadata["lrf_trust_of_new"]["parameters"]["value"]
         
-        
+        # We use copy to create a deep copy of the numpy objects, and not risk modifying the original object
         hcm = sn.SpiceHCM.from_weights(
-            weights=node.weights,
-            activation_bar_vector_1=node.activation_bar_vector_1,
-            activation_bar_vector_2=node.activation_bar_vector_2,
+            weights=node.weights.copy(),
+            activation_bar_vector_1=node.activation_bar_vector_1.copy(),
+            activation_bar_vector_2=node.activation_bar_vector_2.copy(),
             const_lrf_trust_of_new=const_lrf_trust_of_new,
             const_lrf_weights=const_lrf_weights
         )
@@ -187,7 +187,7 @@ def _import_sinabs_module(
         return sn.SpiceNet(
             spice_som_1=_import_sinabs_module(node.soms["0"], batch_size, num_timesteps),
             spice_som_2=_import_sinabs_module(node.soms["1"], batch_size, num_timesteps),
-            correlation_matrix=_import_sinabs_module(list(node.hcms.values())[0], batch_size, num_timesteps)
+            correlation_matrix=_import_sinabs_module(node.hcms["0_1"], batch_size, num_timesteps)
         )
     elif isinstance(node, nir.Input):
         return nn.Identity()
@@ -316,13 +316,13 @@ def _extract_sinabs_module(module: torch.nn.Module) -> Optional[nir.NIRNode]:
         )
     elif isinstance(module, sn.SpiceHCM):
         return nir.SPICEnetHCM(
-            weights=module.weights,
-            activation_bar_vector_1=module.activation_bar_vector_1,
-            activation_bar_vector_2=module.activation_bar_vector_2,
+            weights=module.weights.copy(),
+            activation_bar_vector_1=module.activation_bar_vector_1.copy(),
+            activation_bar_vector_2=module.activation_bar_vector_2.copy(),
             metadata={"iteration": module.get_iteration(), "lrf_trust_of_new": {"type": "const", "parameters": {"value": module.const_lrf_trust_of_new}}, "lrf_weights": {"type": "const", "parameters": {"value": module.const_lrf_weights}}}
         )
     elif isinstance(module, sn.SpiceNet):
-        return nir.SPICENet.from_lists(soms=[_extract_sinabs_module(module.som_1[0]), _extract_sinabs_module(module.som_2[0])], hcms=[(0, 1, _extract_sinabs_module(module.get_correlation_matrix()))])
+        return nir.SPICENet.from_lists(soms=[_extract_sinabs_module(module.last_som_1[0]), _extract_sinabs_module(module.last_som_2[0])], hcms=[(0, 1, _extract_sinabs_module(module.last_correlation_matrix[0]))])
     print(f"Module {module} not supported")
     raise NotImplementedError(f"Module {type(module)} not supported")
 

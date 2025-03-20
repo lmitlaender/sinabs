@@ -5,6 +5,7 @@ import torch
 import math
 import numpy as np
 from tqdm import tqdm
+import copy
 
 from .spice_som import SpiceSOM
 from .spice_hcm import SpiceHCM
@@ -19,7 +20,20 @@ class SpiceNet(nn.Module):
         self.som_2 = [spice_som_2]
         self.__correlation_matrix = [correlation_matrix]
         
+        # To allow for the forward step to be called in NIRTorch we need to the last som and correlation matrix to be stored
+        # Maybe there can be a better way in the future
+        self.last_som_1 = None
+        self.last_som_2 = None
+        self.last_correlation_matrix = None
+        
     def forward(self, input: torch.Tensor) -> torch.Tensor:
+        # Store last som and correlation matrix
+        # This is used during nir export to ensure that it gets the weights before the NIRTorch forward step is called
+        # Preferably avoid this issue all together by setting the model into eval mode before exporting
+        self.last_som_1 = copy.deepcopy(self.som_1)
+        self.last_som_2 = copy.deepcopy(self.som_2)
+        self.last_correlation_matrix = copy.deepcopy(self.__correlation_matrix)
+        
         values_som_1 = input[:, 0].numpy()
         values_som_2 = input[:, 1].numpy()
         b_size = len(input)
@@ -27,17 +41,21 @@ class SpiceNet(nn.Module):
         p_list_som_2 = [values_som_2[i:i + b_size] for i in range(0, len(values_som_2), b_size)]
 
         iterator = range(len(p_list_som_1))
-        for i in iterator:
-            self.som_1[0].fit(p_list_som_1[i], 10)
-            self.som_2[0].fit(p_list_som_2[i], 10)
+        
+        # Only fit if the model is in training mode, so in eval mode the weights are not updated
+        if self.training:
+            for i in iterator:
+                self.som_1[0].fit(p_list_som_1[i], 10)
+                self.som_2[0].fit(p_list_som_2[i], 10)
 
-            self.__correlation_matrix[0].fit(som_1=self.som_1[0],
-                                          som_2=self.som_2[0],
-                                          values_som_1=p_list_som_1[i],
-                                          values_som_2=p_list_som_2[i],
-                                          epochs=10)
+                self.__correlation_matrix[0].fit(som_1=self.som_1[0],
+                                            som_2=self.som_2[0],
+                                            values_som_1=p_list_som_1[i],
+                                            values_som_2=p_list_som_2[i],
+                                            epochs=10)
             
-        return torch.from_numpy(self.__correlation_matrix[0].get_matrix())
+        # Again need to copy here to not return reference
+        return torch.from_numpy(self.__correlation_matrix[0].get_matrix().copy())
 
     def get_som_1(self) -> SpiceSOM:
         return self.som_1[0]
